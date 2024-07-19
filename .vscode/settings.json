@@ -1,0 +1,15 @@
+{
+    "AVR.source.compiler": "/opt/homebrew/opt/avr-gcc@12/bin/avr-gcc",
+    "AVR.programmer.tool": "/opt/homebrew/bin/avrdude",
+    "AVR.source.libraries": [
+        "/opt/homebrew/opt/avr-gcc@12/avr/include"
+    ],
+    "AVR.device.type": "atmega8",
+    "AVR.programmer.type": "atmelice_isp",
+    "AVR.programmer.port": "usb",
+    "AVR.programmer.rate": 460800,
+    "AVR.reporter.arguments": [
+        "-A"
+    ],
+    "AVR.device.frequency": 10000000,
+}
