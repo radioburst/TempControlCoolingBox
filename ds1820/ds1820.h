@@ -3,7 +3,6 @@
 #include <avr/interrupt.h>
 #include <stdlib.h>
 
-
 #ifndef W1_PIN
 #define W1_PIN	PB6
 #define W1_IN	PINB

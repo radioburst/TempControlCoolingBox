@@ -6,27 +6,11 @@
 #include <avr/wdt.h>
 #include <avr/eeprom.h>
 
+// define temp sensor pin
 #define W1_PIN	PD6
 #define W1_IN	PIND
 #define W1_OUT	PORTD
 #define W1_DDR	DDRD
-
-#define MATCH_ROM	0x55
-#define SKIP_ROM	0xCC
-#define	SEARCH_ROM	0xF0
-
-#define CONVERT_T	0x44		// DS1820 commands
-#define READ		0xBE
-#define WRITE		0x4E
-#define EE_WRITE	0x48
-#define EE_RECALL	0xB8
-
-#define	SEARCH_FIRST	0xFF		// start new search
-#define	PRESENCE_ERR	0xFF
-#define	DATA_ERR	0xFE
-#define LAST_DEVICE	0x00
-
-//#define NULL 0x00
 
 volatile float Tist=0;
 volatile float Tsoll=8.0;
@@ -44,39 +28,44 @@ int main()
 	float Tsoll_round;
 	float fSpgFlam = 0;
 	int iLowBat = 0;
-
-	//TCCR1 |= (1 << CS12) | (1 << CS10);
 	
-	//MCUCR |= (1 << ISC11) | (1 << ISC10) ;   			//Steigende Flanke von INT1 als auslöser
-	//GICR |= (1 << INT1);                //Global Interrupt Flag für INT1
-	
-	TCCR0 |= (1 << CS02) | (1 << CS00);
+	// ext INT0
+	// rising edge on INT0
+	MCUCR |= (1<<ISC01) | (1<<ISC00);  
+	// global interrupt flag for INT0 
+	GICR  |= (1<<INT0);		
+	// internal pull up for INT0 pin
+	PORTD |= (1<<DDD2);				
 
-	MCUCR |= (1<<ISC01) | (1<<ISC00);   				//Steigende Flanke von INT0 als auslöser
-	GICR  |= (1<<INT0);					//Global Interrupt Flag für INT0
-
-	TCCR0 |= (1<<CS02)|(1<<CS00);       	// Start Timer 0 with prescaler 1024
-	TIMSK |= (1<<TOIE0);                	// Enable Timer 0 overflow interrupt
+	// Timer 0
+	// start timer 0 with prescaler 1024
+	TCCR0 |= (1<<CS02)|(1<<CS00);     
+	// enable timer 0 overflow interrupt	
+	TIMSK |= (1<<TOIE0);                
 	
-	TCCR1B |= (1<<CS11);       	// Start Timer 1 with prescaler 256
+	// Timer 1
+	// start timer 1 with prescaler 256
+	TCCR1B |= (1<<CS11);       	
 	TCCR1A |= (1<<WGM10);
-	TIMSK |= (1<<TOIE1);                	// Enable Timer 1 overflow interrupt
+	// enable timer 1 overflow interrupt
+	TIMSK |= (1<<TOIE1);        
 	
-	//ADC enable
-	ADMUX = (1<<REFS0);              // Set Reference to AVCC and input to ADC0
-	ADCSRA = ((1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0));    // Enable ADC, set prescaler to 128 // Fadc=Fcpu/prescaler=1000000/16=62.5kHz
-	sei();								//Interrupt aktivieren
-
-	ADCSRA |= (1<<ADSC);              // Start the first conversion
-
-	//DDRD &= ~((1<<DDD2) & (1<<DDD3));	// Als Eingang
-	PORTD |= (1<<DDD2);					// Int Pull UP
-	PORTD |= (1<<DDD3);
+	// ADC
+	// Set reference to AVCC and input to ADC0
+	ADMUX = (1<<REFS0);        	
+	// Enable ADC, set prescaler to 128 // Fadc=Fcpu/prescaler=1000000/16=62.5kHz
+	ADCSRA = ((1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0));   
 	
-	DDRD |= (1<<PD0);	//230V realis
-	DDRD |= (1<<PD1);	//12V realis
-	DDRD |= (1<<PD4);   //buzzer
-	DDRD |= (1<<PD7);	//light
+	// enable interrupts
+	sei();					
+
+	// Start the first conversion
+	ADCSRA |= (1<<ADSC);              			
+	
+	DDRD |= (1<<PD0);	// 230V relay
+	DDRD |= (1<<PD1);	// 12V relay
+	DDRD |= (1<<PD4);   // buzzer
+	DDRD |= (1<<PD7);	// light
 	PORTD &= ~(1<<PD0); // off
 	PORTD &= ~(1<<PD1); // off
 	PORTD &= ~(1<<PD4); // off
@@ -131,12 +120,11 @@ int main()
 			{
 				hilf=~tempH;
 				Tist=(float)(hilf/(-2));
-			}
-						
+			}	
 			else
 				Tist=(float)tempH/2;
 
-			//// Regler /////////////////////////////////////////
+			//// Temp Controller ////////////////////////////////
 			if(iMode != 1)
 			{			
 				if(Tist <= (Tsoll_old - 1) || iLowBat == 1)
@@ -156,9 +144,8 @@ int main()
 					iIsOn = 1;
 				}
 			}
-			/////////////////////////////////////////////////////
 			
-			//// Eingangsspannung ///////////////////////////////
+			//// Input Voltage Check ////////////////////////////
 			if(iMode != 3)
 			{
 				ADMUX = (1<<REFS0)|(1<<MUX0);
@@ -190,10 +177,9 @@ int main()
 			{	
 				iLowBat = 0;
 				iBuzzer = 0;
-			}
-			/////////////////////////////////////////////////////		
+			}		
 			
-			//// Flammkontrolle /////////////////////////////////
+			//// Flame observation //////////////////////////////
 			if(iMode == 1)
 			{
 				ADMUX = (1<<REFS0)|(1<<MUX1);
@@ -213,33 +199,14 @@ int main()
 					iIsOn = 1;
 				}
 			}
-			/////////////////////////////////////////////////////	
-			
-			//// Tempkontrolle //////////////////////////////////
-			
-			
-			/////////////////////////////////////////////////////	
+
 			updateLCD(iLowBat);				
 		}
 		wdt_reset();		
 	}
-	
 	return 0;
 }
 
-///////////////////////////////////////////////////////////
-/*
-ISR(INT1_vect)
-{
-	if(Tsoll<=30)
-	Tsoll+=0.5;
-	
-	else
-	Tsoll=Tsoll;
-	
-	sleep = 1;
-}
-*/
 ISR(INT0_vect)
 {
 	if(iLights == 1)
@@ -296,7 +263,8 @@ ISR(TIMER0_OVF_vect)
 	timer0++;
 	
 	if(timer0>40)	// Temp Messung
-	{	timer0=0;
+	{	
+		timer0=0;
 		
 		w1_command(READ,NULL);
 		tempH=w1_byte_rd();
@@ -311,23 +279,23 @@ void updateLCD(int iLowBat)
 {
 	char lcd_Tist[10], lcd_Tsoll[10], lcd_Volt[10];
 	static int iBlink = 0;
-	//// Ausgabe vorbereiten ///////////////////////////////////
+	// prepare string
 	dtostrf(Tist,2,1,lcd_Tist);
 	dtostrf(Tsoll_old,2,1,lcd_Tsoll);
 	dtostrf(fInVoltage,2,1,lcd_Volt);
 	
 	lcd_clear();			
-	//// Ausgabe T ist ///////////////////////////////////
+	// print current temp
 	lcd_setcursor(0,1);
 	lcd_string("Ti=");
 	lcd_string(lcd_Tist);
 				
-	//// Ausgabe T soll //////////////////////////////////
+	// print set temp
 	lcd_setcursor(1,0);
 	lcd_string("  Ts=");
 	lcd_string(lcd_Tsoll);
 	
-	//// Ausgabe Mode ///////////////////////////////////
+	// print mode
 	lcd_setcursor(0,2);
 	if(iMode == 1)
 	 lcd_string("M:GA");
@@ -336,14 +304,14 @@ void updateLCD(int iLowBat)
     else
 	 lcd_string("M:AC");
 	 
-	 //// Ausgabe Satus /////////////////////////////////
+	 // print status
 	lcd_setcursor(5,2);
 	if(iIsOn)
 		lcd_string("S:On");
     else
 		lcd_string("S:Off");
 	  
-	//// Ausgabe Satus /////////////////////////////////
+	// print input voltage
 	lcd_setcursor(11,2);
 	if(iLowBat && iMode != 3 && iBlink == 1)
 	{	

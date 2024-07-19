@@ -17,7 +17,7 @@ static void lcd_out( uint8_t data )
 {
     data &= 0xF0;                       // obere 4 Bit maskieren
  
-    LCD_PORT &= ~(0xF0>>(4-LCD_DB));    // Maske löschen
+    LCD_PORT &= ~(0xF0>>(4-LCD_DB));    // Maske loeschen
     LCD_PORT |= (data>>(4-LCD_DB));     // Bits setzen
     lcd_enable();
 }
@@ -32,7 +32,7 @@ void lcd_init( void )
                    (1<<LCD_EN);                 // Enable Leitung
     LCD_DDR |= pins;
  
-    // initial alle Ausgänge auf Null
+    // initial alle Ausgaenge auf Null
     LCD_PORT &= ~pins;
  
     // warten auf die Bereitschaft des LCD
@@ -98,7 +98,7 @@ void lcd_command( uint8_t data )
 }
  
 ////////////////////////////////////////////////////////////////////////////////
-// Sendet den Befehl zur Löschung des Displays
+// Sendet den Befehl zur Loeschung des Displays
 void lcd_clear( void )
 {
     lcd_command( LCD_CLEAR_DISPLAY );
@@ -139,7 +139,7 @@ void lcd_setcursor( uint8_t x, uint8_t y )
             break;
  
         default:
-            return;                                   // für den Fall einer falschen Zeile
+            return;                                   // fuer den Fall einer falschen Zeile
     }
  
     lcd_command( data );
@@ -162,7 +162,7 @@ void lcd_generatechar( uint8_t code, const uint8_t *data )
     // Startposition des Zeichens einstellen
     lcd_command( LCD_SET_CGADR | (code<<3) );
  
-    // Bitmuster übertragen
+    // Bitmuster uebertragen
     for ( uint8_t i=0; i<8; i++ )
     {
         lcd_data( data[i] );

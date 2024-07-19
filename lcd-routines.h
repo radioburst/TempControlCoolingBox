@@ -13,9 +13,9 @@
 #endif
  
 ////////////////////////////////////////////////////////////////////////////////
-// Pinbelegung für das LCD, an verwendete Pins anpassen
-// Alle LCD Pins müssen an einem Port angeschlossen sein und die 4
-// Datenleitungen müssen auf aufeinanderfolgenden Pins liegen
+// Pinbelegung fuer das LCD, an verwendete Pins anpassen
+// Alle LCD Pins muessen an einem Port angeschlossen sein und die 4
+// Datenleitungen muessen auf aufeinanderfolgenden Pins liegen
  
 //  LCD DB4-DB7 <-->  PORTD Bit PD0-PD3
 #define LCD_PORT      PORTB
@@ -25,11 +25,11 @@
 //  LCD RS      <-->  PORTD Bit PD4     (RS: 1=Data, 0=Command)
 #define LCD_RS        PB4
  
-//  LCD EN      <-->  PORTD Bit PD5     (EN: 1-Impuls für Daten)
+//  LCD EN      <-->  PORTD Bit PD5     (EN: 1-Impuls fuer Daten)
 #define LCD_EN        PB5
  
 ////////////////////////////////////////////////////////////////////////////////
-// LCD Ausführungszeiten (MS=Millisekunden, US=Mikrosekunden)
+// LCD Ausfuehrungszeiten (MS=Millisekunden, US=Mikrosekunden)
  
 #define LCD_BOOTUP_MS           15
 #define LCD_ENABLE_US           20
@@ -46,8 +46,8 @@
  
 ////////////////////////////////////////////////////////////////////////////////
 // Zeilendefinitionen des verwendeten LCD
-// Die Einträge hier sollten für ein LCD mit einer Zeilenlänge von 16 Zeichen passen
-// Bei anderen Zeilenlängen müssen diese Einträge angepasst werden
+// Die Eintraege hier sollten fuer ein LCD mit einer Zeilenlaenge von 16 Zeichen passen
+// Bei anderen Zeilenlaengen muessen diese Eintraege angepasst werden
  
 #define LCD_DDADR_LINE1         0x00
 #define LCD_DDADR_LINE2         0x40
@@ -59,7 +59,7 @@
 void lcd_init( void );
  
 ////////////////////////////////////////////////////////////////////////////////
-// LCD löschen
+// LCD loeschen
 void lcd_clear( void );
  
 ////////////////////////////////////////////////////////////////////////////////
