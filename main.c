@@ -1,18 +1,11 @@
 #include <avr/io.h>
 #include "lcd-routines.h"
-#include "ds1820/ds1820.h"
+#include "ds18b20/ds18b20.h"
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 #include <avr/eeprom.h>
 
-// define temp sensor pin
-#define W1_PIN PD6
-#define W1_IN PIND
-#define W1_OUT PORTD
-#define W1_DDR DDRD
-
-volatile float Tist = 0;
 volatile float Tsoll = 8.0;
 volatile int timer0 = 0;
 volatile char tempH, tempL, hilf;
@@ -20,9 +13,26 @@ volatile int sleep = 1, iMode = 1; // mode: 1 = gas, 2 = DC, 3 = AC
 volatile int iLights = 1, iLightsCount = 0, iResetLights = 0, iBuzzer = 0, iBuzzerCount = 0;
 int iIsOn = 0;
 float fInVoltage = 0, Tsoll_old = 0;
-;
+
+volatile float fTCurrent;
+uint8_t uiTempError;
+
 void myPrintf(float fVal, char *);
 void updateLCD(int iLowBat);
+
+// Pinout:
+// PB1 = Fan
+
+// PD0 = 230V relay
+// PD1 = 12V relay
+// PD2 = Button
+// PD4 = buzzer
+// PD6 = temp sensor
+// PD7 = light
+
+// PC0 = Poti
+// PC1 = DC Input Voltage
+// PC2 = Flame Control
 
 int main()
 {
@@ -72,6 +82,8 @@ int main()
 	PORTD &= ~(1 << PD4); // off
 	PORTD |= (1 << PD7);
 
+	w1_reset();
+
 	lcd_init();
 	lcd_string("Pflanzbeet Braeu");
 	lcd_setcursor(1, 2);
@@ -118,18 +130,11 @@ int main()
 		if (sleep == 1)
 		{
 			sleep = 0;
-			if (tempL > 0x80)
-			{
-				hilf = ~tempH;
-				Tist = (float)(hilf / (-2));
-			}
-			else
-				Tist = (float)tempH / 2;
 
 			//// Temp Controller ////////////////////////////////
 			if (iMode != 1)
 			{
-				if (Tist <= (Tsoll_old - 1) || iLowBat == 1)
+				if (fTCurrent <= (Tsoll_old - 1) || iLowBat == 1)
 				{
 					if (iMode == 2)
 						PORTD &= ~(1 << PD1); // AUS DC
@@ -137,7 +142,7 @@ int main()
 						PORTD &= ~(1 << PD0); // AUS AC
 					iIsOn = 0;
 				}
-				else if (Tist >= (Tsoll_old + 0.5) && iLowBat == 0)
+				else if (fTCurrent >= (Tsoll_old + 0.5) && iLowBat == 0)
 				{
 					if (iMode == 2)
 						PORTD |= (1 << PD1); // EIN DC
@@ -266,15 +271,17 @@ ISR(TIMER0_OVF_vect)
 {
 	timer0++;
 
-	if (timer0 > 40) // Temp Messung
+	if (timer0 > 60) // Temp Messung
 	{
 		timer0 = 0;
 
-		w1_command(READ, NULL);
-		tempH = w1_byte_rd();
-		tempL = w1_byte_rd();
+		if (read_meas(&fTCurrent) > 0)
+			uiTempError = 1;
+		else
+			uiTempError = 0;
 
 		start_meas();
+
 		sleep = 1;
 	}
 }
@@ -284,7 +291,7 @@ void updateLCD(int iLowBat)
 	char lcd_Tist[10], lcd_Tsoll[10], lcd_Volt[10];
 	static int iBlink = 0;
 	// prepare string
-	dtostrf(Tist, 2, 1, lcd_Tist);
+	dtostrf(fTCurrent, 2, 1, lcd_Tist);
 	dtostrf(Tsoll_old, 2, 1, lcd_Tsoll);
 	dtostrf(fInVoltage, 2, 1, lcd_Volt);
 
@@ -292,7 +299,10 @@ void updateLCD(int iLowBat)
 	// print current temp
 	lcd_setcursor(0, 1);
 	lcd_string("Ti=");
-	lcd_string(lcd_Tist);
+	if (uiTempError > 0)
+		lcd_string(" Err");
+	else
+		lcd_string(lcd_Tist);
 
 	// print set temp
 	lcd_setcursor(1, 0);
