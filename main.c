@@ -1,16 +1,18 @@
 #include <avr/io.h>
-#include "lcd-routines.h"
-#include "ds18b20/ds18b20.h"
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 #include <avr/eeprom.h>
 
+#include "lcd-routines.h"
+#include "ds18b20/ds18b20.h"
+#include "rotary/rotary_encoder.h"
+
 volatile float Tsoll = 8.0;
 volatile int timer0 = 0;
 volatile char tempH, tempL, hilf;
 volatile int sleep = 1, iMode = 1; // mode: 1 = gas, 2 = DC, 3 = AC
-volatile int iLights = 1, iLightsCount = 0, iResetLights = 0, iBuzzer = 0, iBuzzerCount = 0;
+volatile int iLights = 1, iLightsCount = 0, iResetLights = 0;
 int iIsOn = 0;
 float fInVoltage = 0, Tsoll_old = 0;
 
@@ -25,8 +27,9 @@ void updateLCD(int iLowBat);
 
 // PD0 = 230V relay
 // PD1 = 12V relay
-// PD2 = Button
-// PD4 = buzzer
+// PD2 = Button Rotary
+// PD3 = Rotary A
+// PD4 = Rotary B
 // PD6 = temp sensor
 // PD7 = light
 
@@ -34,19 +37,17 @@ void updateLCD(int iLowBat);
 // PC1 = DC Input Voltage
 // PC2 = Flame Control
 
+#define PHASE_A (PIND & 1 << PD3)
+#define PHASE_B (PIND & 1 << PD4)
+
 int main()
 {
 	float Tsoll_round;
 	float fSpgFlam = 0;
 	int iLowBat = 0;
 
-	// ext INT0
-	// rising edge on INT0
-	MCUCR |= (1 << ISC01) | (1 << ISC00);
-	// global interrupt flag for INT0
-	GICR |= (1 << INT0);
-	// internal pull up for INT0 pin
-	PORTD |= (1 << DDD2);
+	MCUCR |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
+	GICR |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
 
 	// Timer 0
 	// start timer 0 with prescaler 1024
@@ -54,63 +55,42 @@ int main()
 	// enable timer 0 overflow interrupt
 	TIMSK |= (1 << TOIE0);
 
-	// Timer 1
-	// start timer 1 with prescaler 256
-	TCCR1B |= (1 << CS11);
-	TCCR1A |= (1 << WGM10);
-	// enable timer 1 overflow interrupt
-	TIMSK |= (1 << TOIE1);
-
 	// ADC
 	// Set reference to AVCC and input to ADC0
 	ADMUX = (1 << REFS0);
 	// Enable ADC, set prescaler to 128 // Fadc=Fcpu/prescaler=1000000/16=62.5kHz
 	ADCSRA = ((1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0));
 
-	// enable interrupts
-	sei();
-
 	// Start the first conversion
 	ADCSRA |= (1 << ADSC);
 
 	DDRD |= (1 << PD0);	  // 230V relay
 	DDRD |= (1 << PD1);	  // 12V relay
-	DDRD |= (1 << PD4);	  // buzzer
 	DDRD |= (1 << PD7);	  // light
 	PORTD &= ~(1 << PD0); // off
 	PORTD &= ~(1 << PD1); // off
-	PORTD &= ~(1 << PD4); // off
-	PORTD |= (1 << PD7);
+	PORTD |= (1 << PD7);  // on
 
+	encode_init();
 	w1_reset();
-
 	lcd_init();
+
+	// enable interrupts
+	sei();
+
 	lcd_string("Pflanzbeet Braeu");
 	lcd_setcursor(1, 2);
 	lcd_string("Andreas Dorrer");
-	iBuzzer = 1;
 	_delay_ms(1000);
-	iBuzzer = 0;
-	PORTD &= ~(1 << PD4); // Buzzer off
-	_delay_ms(2000);
+
 	lcd_clear();
 
 	wdt_enable(WDTO_1S);
 	iLightsCount = 0;
 	while (1)
 	{
-		ADMUX = (1 << REFS0); // ((1<<REFS0) | (1<<REFS0));
-		ADCSRA |= (1 << ADSC);
-		while (ADCSRA & (1 << ADSC))
-			;
-
-		Tsoll = (ADC * 5.0 / 1024.0) * 5;
-		Tsoll_round = (int)Tsoll;
-
-		if (Tsoll - Tsoll_round > 0.5)
-			Tsoll = Tsoll_round + 0.5;
-		else
-			Tsoll = Tsoll_round;
+		int8_t ticks = encode_read4();
+		Tsoll += 0.5 * ticks;
 
 		if (Tsoll_old > Tsoll + 0.5 || Tsoll_old < Tsoll - 0.5)
 			iLights = 1;
@@ -165,26 +145,26 @@ int main()
 				if (fInVoltage < 10.3 && iMode == 1)
 				{
 					iLowBat = 1;
-					iBuzzer = 1;
+					// iBuzzer = 1;
 				}
 				else if (fInVoltage < 10.9 && iMode == 2)
 				{
 					iLowBat = 1;
-					iBuzzer = 1;
+					// iBuzzer = 1;
 				}
 				else
 				{
 					iLowBat = 0;
-					if (iMode == 2 && iIsOn != 0)
+					/*if (iMode == 2 && iIsOn != 0)
 						iBuzzer = 0;
 					else if (iMode != 2)
-						iBuzzer = 0;
+						iBuzzer = 0;*/
 				}
 			}
 			else
 			{
 				iLowBat = 0;
-				iBuzzer = 0;
+				// iBuzzer = 0;
 			}
 
 			//// Flame observation //////////////////////////////
@@ -198,13 +178,13 @@ int main()
 				fSpgFlam = ADC * 5.0 / 1024.0;
 				if (fSpgFlam > 2.0)
 				{
-					iBuzzer = 1;
+					// iBuzzer = 1;
 					iIsOn = 0;
 				}
 				else
 				{
-					if (iLowBat != 1)
-						iBuzzer = 0;
+					/*if (iLowBat != 1)
+						iBuzzer = 0;*/
 					iIsOn = 1;
 				}
 			}
@@ -234,37 +214,13 @@ ISR(INT0_vect)
 	iLights = 1;
 }
 
-ISR(TIMER1_OVF_vect)
+ISR(INT1_vect)
 {
-	if (iLights == 1)
-	{
-		iLightsCount++;
-		if (iLightsCount > 8000)
-		{
-			iLights = 0;
-			iLightsCount = 0;
-		}
-		if (iResetLights)
-		{
-			iLightsCount = 0;
-			iResetLights = 0;
-		}
-	}
-	else
-	{
-		iLights = 0;
-		iResetLights = 0;
-		iLightsCount = 0;
-	}
-
-	if (iBuzzer == 1 && iBuzzerCount < 1000)
-		PORTD ^= (1 << PD4);
-	else if (iBuzzer == 1 && iBuzzerCount < 3000)
-		PORTD &= ~(1 << PD4);
-	else if (iBuzzerCount > 4000)
-		iBuzzerCount = 0;
-	if (iBuzzer == 1)
-		iBuzzerCount++;
+	// start encode!
+	sleep = 1;
+	iLights = 1;
+	TIMSK |= 1 << OCIE1A; // start encode timer
+	GICR &= ~(1 << INT1); // stop ext interrup not needed right now
 }
 
 ISR(TIMER0_OVF_vect)
@@ -283,6 +239,30 @@ ISR(TIMER0_OVF_vect)
 		start_meas();
 
 		sleep = 1;
+	}
+
+	if (iLights == 1)
+	{
+		iLightsCount++;
+		if (iLightsCount > 250)
+		{
+			iLights = 0;
+			iLightsCount = 0;
+		}
+		if (iResetLights)
+		{
+			iLightsCount = 0;
+			iResetLights = 0;
+		}
+	}
+	else
+	{
+		iLights = 0;
+		iResetLights = 0;
+		iLightsCount = 0;
+		GIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
+		GICR |= (1 << INT1);
+		TIMSK &= ~(1 << OCIE1A); // stop encode timer as not needed right now
 	}
 }
 
