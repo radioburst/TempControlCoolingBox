@@ -19,7 +19,7 @@
                 "-fno-threadsafe-statics",
                 "-pipe",
                 "-mmcu=atmega8",
-                "-DF_CPU=12000000UL"
+                "-DF_CPU=16000000UL"
             ],
             "macFrameworkPath": [
                 "/System/Library/Frameworks",

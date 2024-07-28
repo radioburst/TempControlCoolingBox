@@ -219,7 +219,7 @@ ISR(INT1_vect)
 	// start encode!
 	sleep = 1;
 	iLights = 1;
-	TIMSK |= 1 << OCIE1A; // start encode timer
+	start_encode();
 	GICR &= ~(1 << INT1); // stop ext interrup not needed right now
 }
 
@@ -262,7 +262,7 @@ ISR(TIMER0_OVF_vect)
 		iLightsCount = 0;
 		GIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
 		GICR |= (1 << INT1);
-		TIMSK &= ~(1 << OCIE1A); // stop encode timer as not needed right now
+		stop_encode(); // stop encode timer as not needed right now
 	}
 }
 

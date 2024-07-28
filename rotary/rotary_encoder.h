@@ -1,9 +1,13 @@
 #ifndef _rotary_encoder_h_
-#define _ds18b20_h_
+#define _rotary_encoder_h_
 
 #include <stdio.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
+
+/*
+Use Timer2 and INT0 of the Atmega8 to encode a rotary encoder.
+*/
 
 #define PHASE_A (PIND & 1 << PD3)
 #define PHASE_B (PIND & 1 << PD4)
@@ -27,8 +31,29 @@ void encode_init()
     PORTD |= (1 << PD3);  // int. pull up
     PORTD |= (1 << PD2);  // int. pull up
 
-    TCCR1B = (1 << CS11) | (1 << CS10) | (1 << WGM12); // CTC, XTAL / 64
-    OCR1A = (uint8_t)(F_CPU / 64 * 1e-3 - 0.5);        // 2ms
+    // 2ms interrupt on Timer2
+
+    // TCCR1B = (1 << CS11) | (1 << CS10) | (1 << WGM12); // CTC, XTAL / 64
+    // OCR1A = (uint8_t)(F_CPU / 64 * 1e-3 - 0.5);        // 2ms
+
+    // Set CTC mode (Clear Timer on Compare Match)
+    TCCR2 |= (1 << WGM21);
+    // Set prescaler to 128
+    TCCR2 |= (1 << CS22) | (1 << CS20); // CS22 and CS20 set, CS21 cleared
+    // Set compare value to 250 for 2ms interval
+    OCR2 = 250;
+}
+
+void start_encode()
+{
+    // Enable Timer2 Compare Match Interrupt
+    TIMSK |= (1 << OCIE2);
+}
+
+void stop_encode()
+{
+    // Enable Timer2 Compare Match Interrupt
+    TIMSK &= ~(1 << OCIE2);
 }
 
 int8_t encode_read4() // read four step encoders
@@ -42,7 +67,7 @@ int8_t encode_read4() // read four step encoders
     return val >> 2;
 }
 
-ISR(TIMER1_COMPA_vect) // 2ms for manual movement
+ISR(TIMER2_COMP_vect) // 2ms for manual movement
 {
     static int8_t last;
     int8_t newVal, diff;
