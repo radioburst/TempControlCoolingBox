@@ -18,9 +18,9 @@
 // Datenleitungen muessen auf aufeinanderfolgenden Pins liegen
 
 //  LCD DB4-DB7 <-->  PORTB Bit PB2-PB5
-#define LCD_PORT PORTB
-#define LCD_DDR DDRB
-#define LCD_DB PB2
+#define LCD_PORT PORTC
+#define LCD_DDR DDRC
+#define LCD_DB PC2
 
 //  LCD RS      <-->  PORTB Bit PB0     (RS: 1=Data, 0=Command)
 #define LCD_RS_PORT PORTB

@@ -7,9 +7,9 @@
     "AVR.device.type": "atmega8",
     "AVR.programmer.type": "atmelice_isp",
     "AVR.programmer.port": "usb",
-    "AVR.programmer.rate": 460800,
+    "AVR.programmer.rate": 921600,
     "AVR.reporter.arguments": [
         "-A"
     ],
-    "AVR.device.frequency": 10000000,
+    "AVR.device.frequency": 16000000,
 }

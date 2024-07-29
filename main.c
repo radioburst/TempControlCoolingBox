@@ -7,6 +7,7 @@
 #include "lcd-routines.h"
 #include "ds18b20/ds18b20.h"
 #include "rotary/rotary_encoder.h"
+#include "fan/fan.h"
 
 volatile float Tsoll = 8.0;
 volatile int timer0 = 0;
@@ -23,7 +24,8 @@ void myPrintf(float fVal, char *);
 void updateLCD(int iLowBat);
 
 // Pinout:
-// PB1 = Fan
+// PB1 = Fan internal
+// PB2 = Fan external
 
 // PD0 = 230V relay
 // PD1 = 12V relay
@@ -72,12 +74,14 @@ int main()
 	PORTD |= (1 << PD7);  // on
 
 	encode_init();
+	fan_init();
 	w1_reset();
 	lcd_init();
 
 	// enable interrupts
 	sei();
 
+	lcd_setcursor(0, 1);
 	lcd_string("Pflanzbeet Braeu");
 	lcd_setcursor(1, 2);
 	lcd_string("Andreas Dorrer");
@@ -87,6 +91,7 @@ int main()
 
 	wdt_enable(WDTO_1S);
 	iLightsCount = 0;
+
 	while (1)
 	{
 		int8_t ticks = encode_read4();
