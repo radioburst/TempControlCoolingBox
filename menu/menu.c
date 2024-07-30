@@ -1,4 +1,5 @@
 #include "menu.h"
+#include "../eeprom/eeprom.h"
 #include "../lcd-routines.h"
 #include "../globals.h"
 
@@ -46,6 +47,7 @@ void saveTemp()
     RodaryPush = &saveMode;
     RodaryTick = &editMode;
     Blink = &blinkMode;
+    writeSetTemp(fSetTemp);
 }
 
 void blinkSetTemp(uint8_t toggle)
@@ -88,6 +90,7 @@ void saveMode()
 {
     mode = newMode;
     resetMenu();
+    writeMode(mode);
     state = IDLE;
 }
 

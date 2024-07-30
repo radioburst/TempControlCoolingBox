@@ -10,6 +10,7 @@
 #include "rotary/rotary_encoder.h"
 #include "fan/fan.h"
 #include "menu/menu.h"
+#include "eeprom/eeprom.h"
 #include "globals.h"
 
 volatile uint16_t iInactiveCount = 0;
@@ -61,6 +62,10 @@ void wakeUp();
 int main()
 {
 	int8_t enc_new_delta = 0;
+
+	// Read value from eeprom
+	fSetTemp = readSetTemp();
+	mode = readMode();
 
 	MCUCR |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
 	GICR |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
@@ -367,6 +372,11 @@ void measureAll()
 		{
 			PORTD &= ~(1 << PD1); // AUS DC
 		}
+	}
+	else
+	{
+		PORTD &= ~(1 << PD0); // AUS AC
+		PORTD &= ~(1 << PD1); // AUS DC
 	}
 
 	//// Input Voltage Check ////////////////////////////
