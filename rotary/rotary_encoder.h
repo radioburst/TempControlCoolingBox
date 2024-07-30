@@ -17,8 +17,8 @@ volatile int8_t enc_delta = 0;
 void encode_init()
 {
     // ext INT0
-    // rising edge on INT0
-    MCUCR |= (1 << ISC01) | (1 << ISC00);
+    // any edge on INT0
+    MCUCR |= (1 << ISC00);
     // global interrupt flag for INT0
     GICR |= (1 << INT0);
     // internal pull up for INT0 pin

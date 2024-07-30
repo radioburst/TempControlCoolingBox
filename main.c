@@ -3,25 +3,41 @@
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 #include <avr/eeprom.h>
+#include <avr/sleep.h>
 
 #include "lcd-routines.h"
 #include "ds18b20/ds18b20.h"
 #include "rotary/rotary_encoder.h"
 #include "fan/fan.h"
+#include "menu/menu.h"
+#include "globals.h"
 
-volatile float Tsoll = 8.0;
+volatile uint16_t iInactiveCount = 0;
+volatile uint8_t uiRodaryPressActive = 0, uiRodaryPush = 0;
+volatile uint8_t uiToggle = 1;
+volatile uint8_t uiLowBat = 1;
+
+volatile STATES_t state = MEASURE_ALL;
+OPERATION_MODES_t mode = GAS;
+float fSetTemp = 0;
+
 volatile int timer0 = 0;
-volatile char tempH, tempL, hilf;
-volatile int sleep = 1, iMode = 1; // mode: 1 = gas, 2 = DC, 3 = AC
-volatile int iLights = 1, iLightsCount = 0, iResetLights = 0;
+volatile int iLights = 0;
 int iIsOn = 0;
-float fInVoltage = 0, Tsoll_old = 0;
-
+float fInVoltage = 0;
 volatile float fTCurrent;
 uint8_t uiTempError;
 
+// eeprom values:
+uint8_t uiLongPressTime = 60;
+
 void myPrintf(float fVal, char *);
-void updateLCD(int iLowBat);
+void updateLCD();
+void measureAll();
+void setLight(uint8_t on);
+void switchToEdit();
+void switchToMenu();
+void wakeUp();
 
 // Pinout:
 // PB1 = Fan internal
@@ -44,9 +60,7 @@ void updateLCD(int iLowBat);
 
 int main()
 {
-	float Tsoll_round;
-	float fSpgFlam = 0;
-	int iLowBat = 0;
+	int8_t enc_new_delta = 0;
 
 	MCUCR |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
 	GICR |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
@@ -77,6 +91,7 @@ int main()
 	fan_init();
 	w1_reset();
 	lcd_init();
+	setLight(1);
 
 	// enable interrupts
 	sei();
@@ -87,115 +102,109 @@ int main()
 	lcd_string("Andreas Dorrer");
 	_delay_ms(1000);
 
-	lcd_clear();
+	iInactiveCount = 0;
 
 	wdt_enable(WDTO_1S);
-	iLightsCount = 0;
+	set_sleep_mode(SLEEP_MODE_IDLE);
 
 	while (1)
 	{
-		int8_t ticks = encode_read4();
-		Tsoll += 0.5 * ticks;
-
-		if (Tsoll_old > Tsoll + 0.5 || Tsoll_old < Tsoll - 0.5)
-			iLights = 1;
-
-		if (Tsoll_old != Tsoll && iLights == 1)
+		switch (state)
 		{
-			Tsoll_old = Tsoll;
-			iResetLights = 1;
-			updateLCD(iLowBat);
+		case SLEEP:
+		{
+			GIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
+			GICR |= (1 << INT1);
+			stop_encode(); // stop encode timer as not needed right now
+			setLight(0);
+			RodaryPush = &wakeUp;
+			RodaryLongPush = NULL;
+			sleep_mode();
 		}
-
-		if (iLights == 1)
-			PORTD |= (1 << PD7);
-		else
-			PORTD &= ~(1 << PD7);
-
-		if (sleep == 1)
+		break;
+		case IDLE:
 		{
-			sleep = 0;
-
-			//// Temp Controller ////////////////////////////////
-			if (iMode != 1)
+			if (iInactiveCount > 200)
 			{
-				if (fTCurrent <= (Tsoll_old - 1) || iLowBat == 1)
-				{
-					if (iMode == 2)
-						PORTD &= ~(1 << PD1); // AUS DC
-					else if (iMode == 3)
-						PORTD &= ~(1 << PD0); // AUS AC
-					iIsOn = 0;
-				}
-				else if (fTCurrent >= (Tsoll_old + 0.5) && iLowBat == 0)
-				{
-					if (iMode == 2)
-						PORTD |= (1 << PD1); // EIN DC
-					else if (iMode == 3)
-						PORTD |= (1 << PD0); // EIN AC
-					iIsOn = 1;
-				}
+				iInactiveCount = 0;
+				setLight(0);
+				state = SLEEP;
 			}
+		}
+		break;
+		case WAKE_UP:
+		{
 
-			//// Input Voltage Check ////////////////////////////
-			if (iMode != 3)
+			start_encode();
+			GICR &= ~(1 << INT1); // stop ext interrup not needed right now
+			setLight(1);
+			RodaryPush = &switchToEdit;
+			RodaryLongPush = &switchToMenu;
+			state = IDLE;
+		}
+		break;
+		case MEASURE_ALL:
+		{
+			measureAll();
+			updateLCD();
+
+			if (iLights > 0)
 			{
-				ADMUX = (1 << REFS0) | (1 << MUX0);
-				ADCSRA |= (1 << ADSC);
-				while (ADCSRA & (1 << ADSC))
-					;
-
-				fInVoltage = (ADC * 5.0 / 1024.0) / 0.31122;
-
-				if (fInVoltage < 10.3 && iMode == 1)
-				{
-					iLowBat = 1;
-					// iBuzzer = 1;
-				}
-				else if (fInVoltage < 10.9 && iMode == 2)
-				{
-					iLowBat = 1;
-					// iBuzzer = 1;
-				}
-				else
-				{
-					iLowBat = 0;
-					/*if (iMode == 2 && iIsOn != 0)
-						iBuzzer = 0;
-					else if (iMode != 2)
-						iBuzzer = 0;*/
-				}
+				state = IDLE;
 			}
 			else
 			{
-				iLowBat = 0;
-				// iBuzzer = 0;
+				state = SLEEP;
 			}
-
-			//// Flame observation //////////////////////////////
-			if (iMode == 1)
-			{
-				ADMUX = (1 << REFS0) | (1 << MUX1);
-				ADCSRA |= (1 << ADSC);
-				while (ADCSRA & (1 << ADSC))
-					;
-
-				fSpgFlam = ADC * 5.0 / 1024.0;
-				if (fSpgFlam > 2.0)
-				{
-					// iBuzzer = 1;
-					iIsOn = 0;
-				}
-				else
-				{
-					/*if (iLowBat != 1)
-						iBuzzer = 0;*/
-					iIsOn = 1;
-				}
-			}
-
-			updateLCD(iLowBat);
 		}
+		break;
+		case EDIT_TEMP_MODE:
+		{
+			setLight(1);
+			if (iInactiveCount > 500)
+			{
+				iInactiveCount = 0;
+				resetMenu();
+				state = MEASURE_ALL;
+			}
+		}
+		break;
+		case MENU:
+		{
+			setLight(1);
+			if (iInactiveCount > 500)
+			{
+				iInactiveCount = 0;
+				resetMenu();
+				state = MEASURE_ALL;
+			}
+		}
+		}
+
+		// check rodary must be in main! Otherwise issues with lcd when interupt driven since an lcd command can be interupted (cli() and sei() is no solution because of buzzer!)
+		if (uiRodaryPush == 1)
+		{
+			uiRodaryPressActive = 0;
+			uiRodaryPush = 0;
+			iInactiveCount = 0;
+			(*RodaryPush)();
+		}
+		else if (RodaryLongPush && (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1)))
+		{
+			uiRodaryPressActive = 0;
+			uiRodaryPush = 0;
+			iInactiveCount = 0;
+			(*RodaryLongPush)();
+		}
+
+		enc_new_delta = encode_read4();
+		if (enc_new_delta != 0)
+		{
+			iInactiveCount = 0;
+			if (RodaryTick)
+				(*RodaryTick)(enc_new_delta);
+		}
+
 		wdt_reset();
 	}
 	return 0;
@@ -203,81 +212,73 @@ int main()
 
 ISR(INT0_vect)
 {
-	if (iLights == 1)
+	if (!(PIND & (1 << PD2)))
 	{
-		if (iMode == 1)
-			iMode = 3;
-		else if (iMode == 3)
-			iMode = 2;
-		else if (iMode == 2)
-			iMode = 1;
-		PORTD &= ~(1 << PD0); // off AC
-		PORTD &= ~(1 << PD1); // off DC
-		iResetLights = 1;
+		iInactiveCount = 0;
+		uiRodaryPressActive = 1;
+		iLights = 1;
 	}
-	sleep = 1;
-	iLights = 1;
+	else if (uiRodaryPressActive)
+	{
+		if (RodaryLongPush && iInactiveCount > (uiLongPressTime * 2) - 1)
+			uiRodaryPush = 2;
+		else if (RodaryPush)
+			uiRodaryPush = 1;
+		iLights = 1;
+		iInactiveCount = 0;
+	}
 }
 
 ISR(INT1_vect)
 {
-	// start encode!
-	sleep = 1;
-	iLights = 1;
-	start_encode();
-	GICR &= ~(1 << INT1); // stop ext interrup not needed right now
+	iInactiveCount = 0;
+	state = WAKE_UP;
 }
 
 ISR(TIMER0_OVF_vect)
 {
 	timer0++;
 
-	if (timer0 > 60) // Temp Messung
+	if (timer0 % 20 == 0 && Blink)
+	{
+		uiToggle = !uiToggle;
+		(*Blink)(uiToggle);
+	}
+
+	// Meassure all if in idle or sleep
+	if (timer0 > 60 && (state == SLEEP || state == IDLE))
 	{
 		timer0 = 0;
-
-		if (read_meas(&fTCurrent) > 0)
-			uiTempError = 1;
-		else
-			uiTempError = 0;
-
-		start_meas();
-
-		sleep = 1;
+		state = MEASURE_ALL;
 	}
 
-	if (iLights == 1)
+	if (iLights > 0)
 	{
-		iLightsCount++;
-		if (iLightsCount > 250)
-		{
-			iLights = 0;
-			iLightsCount = 0;
-		}
-		if (iResetLights)
-		{
-			iLightsCount = 0;
-			iResetLights = 0;
-		}
-	}
-	else
-	{
-		iLights = 0;
-		iResetLights = 0;
-		iLightsCount = 0;
-		GIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
-		GICR |= (1 << INT1);
-		stop_encode(); // stop encode timer as not needed right now
+		iInactiveCount++;
 	}
 }
 
-void updateLCD(int iLowBat)
+void setLight(uint8_t on)
+{
+	if (on > 0)
+	{
+		PORTD |= (1 << PD7);
+		iLights = 1;
+	}
+	else
+	{
+		PORTD &= ~(1 << PD7);
+		iLights = 0;
+	}
+}
+
+void updateLCD()
 {
 	char lcd_Tist[10], lcd_Tsoll[10], lcd_Volt[10];
 	static int iBlink = 0;
 	// prepare string
 	dtostrf(fTCurrent, 2, 1, lcd_Tist);
-	dtostrf(Tsoll_old, 2, 1, lcd_Tsoll);
+	dtostrf(fSetTemp, 2, 1, lcd_Tsoll);
 	dtostrf(fInVoltage, 2, 1, lcd_Volt);
 
 	lcd_clear();
@@ -296,9 +297,9 @@ void updateLCD(int iLowBat)
 
 	// print mode
 	lcd_setcursor(0, 2);
-	if (iMode == 1)
+	if (mode == GAS)
 		lcd_string("M:GA");
-	else if (iMode == 2)
+	else if (mode == DC)
 		lcd_string("M:DC");
 	else
 		lcd_string("M:AC");
@@ -312,12 +313,12 @@ void updateLCD(int iLowBat)
 
 	// print input voltage
 	lcd_setcursor(11, 2);
-	if (iLowBat && iMode != 3 && iBlink == 1)
+	if (uiLowBat && mode != AC && iBlink == 1)
 	{
 		lcd_string("LOW!!");
 		iBlink = 0;
 	}
-	else if (iMode != 3)
+	else if (mode != AC)
 	{
 		lcd_string(lcd_Volt);
 		lcd_string("V");
@@ -325,4 +326,120 @@ void updateLCD(int iLowBat)
 	}
 	else
 		lcd_string("N/A");
+}
+
+void measureAll()
+{
+	if (read_meas(&fTCurrent) > 0)
+		uiTempError = 1;
+	else
+		uiTempError = 0;
+
+	start_meas();
+
+	float fSpgFlam = 0;
+
+	//// Temp Controller ////////////////////////////////
+	if (mode != GAS)
+	{
+		if (fTCurrent <= (fSetTemp - 1) || uiLowBat == 1)
+		{
+			if (mode == DC)
+				PORTD &= ~(1 << PD1); // AUS DC
+			else if (mode == AC)
+				PORTD &= ~(1 << PD0); // AUS AC
+			iIsOn = 0;
+		}
+		else if (fTCurrent >= (fSetTemp + 0.5) && uiLowBat == 0)
+		{
+			if (mode == DC)
+				PORTD |= (1 << PD1); // EIN DC
+			else if (mode == AC)
+				PORTD |= (1 << PD0); // EIN AC
+			iIsOn = 1;
+		}
+
+		if (mode == DC)
+		{
+			PORTD &= ~(1 << PD0); // AUS AC
+		}
+		else if (mode == AC)
+		{
+			PORTD &= ~(1 << PD1); // AUS DC
+		}
+	}
+
+	//// Input Voltage Check ////////////////////////////
+	if (mode != AC)
+	{
+		ADMUX = (1 << REFS0) | (1 << MUX0);
+		ADCSRA |= (1 << ADSC);
+		while (ADCSRA & (1 << ADSC))
+			;
+
+		fInVoltage = (ADC * 5.0 / 1024.0) / 0.31122;
+
+		if (fInVoltage < 10.3 && mode == GAS)
+		{
+			uiLowBat = 1;
+			// iBuzzer = 1;
+		}
+		else if (fInVoltage < 10.9 && mode == DC)
+		{
+			uiLowBat = 1;
+			// iBuzzer = 1;
+		}
+		else
+		{
+			uiLowBat = 0;
+			/*if (iMode == 2 && iIsOn != 0)
+				iBuzzer = 0;
+			else if (iMode != 2)
+				iBuzzer = 0;*/
+		}
+	}
+	else
+	{
+		uiLowBat = 0;
+		// iBuzzer = 0;
+	}
+
+	//// Flame observation //////////////////////////////
+	if (mode == GAS)
+	{
+		ADMUX = (1 << REFS0) | (1 << MUX1);
+		ADCSRA |= (1 << ADSC);
+		while (ADCSRA & (1 << ADSC))
+			;
+
+		fSpgFlam = ADC * 5.0 / 1024.0;
+		if (fSpgFlam > 2.0)
+		{
+			// iBuzzer = 1;
+			iIsOn = 0;
+		}
+		else
+		{
+			/*if (iLowBat != 1)
+				iBuzzer = 0;*/
+			iIsOn = 1;
+		}
+	}
+}
+
+void switchToEdit()
+{
+	state = EDIT_TEMP_MODE;
+	enableSetTempAndModeEdit();
+}
+
+void switchToMenu()
+{
+	state = MENU;
+	drawMenu();
+}
+
+void wakeUp()
+{
+	state = WAKE_UP;
 }
