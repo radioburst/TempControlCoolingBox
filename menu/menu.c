@@ -91,7 +91,7 @@ void saveMode()
     mode = newMode;
     resetMenu();
     writeMode(mode);
-    state = IDLE;
+    state = WAKE_UP;
 }
 
 void blinkMode(uint8_t toggle)

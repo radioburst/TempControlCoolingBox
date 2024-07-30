@@ -192,14 +192,16 @@ int main()
 			uiRodaryPressActive = 0;
 			uiRodaryPush = 0;
 			iInactiveCount = 0;
-			(*RodaryPush)();
+			if (RodaryPush)
+				(*RodaryPush)();
 		}
-		else if (RodaryLongPush && (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1)))
+		else if (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1))
 		{
 			uiRodaryPressActive = 0;
 			uiRodaryPush = 0;
 			iInactiveCount = 0;
-			(*RodaryLongPush)();
+			if (RodaryLongPush)
+				(*RodaryLongPush)();
 		}
 
 		enc_new_delta = encode_read4();
@@ -225,9 +227,9 @@ ISR(INT0_vect)
 	}
 	else if (uiRodaryPressActive)
 	{
-		if (RodaryLongPush && iInactiveCount > (uiLongPressTime * 2) - 1)
+		if (iInactiveCount > (uiLongPressTime * 2) - 1)
 			uiRodaryPush = 2;
-		else if (RodaryPush)
+		else
 			uiRodaryPush = 1;
 		iLights = 1;
 		iInactiveCount = 0;
