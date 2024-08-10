@@ -3,16 +3,24 @@
 #include "../lcd-routines.h"
 #include "../globals.h"
 
+#define MAXMENULINES 1
+
 // ext. Global Function pointers
 void (*RodaryTick)(int8_t);
 void (*RodaryPush)();
 void (*RodaryLongPush)();
 void (*Blink)(uint8_t);
 
-uint8_t currentPage = 0;
+void (*MenuSelections[MAXMENULINES])();
+void (*MenuSelectionsDraw[MAXMENULINES])(uint8_t);
 
-float fNewSetTemp = 0;
+char *menuTexts[] = {"Temp Thr. Pos"};
+
+int8_t currentIndex = 0;
+
+float fNewFloatValue = 0;
 OPERATION_MODES_t newMode;
+char lcd_Buffer[10];
 
 void resetMenu()
 {
@@ -24,7 +32,7 @@ void resetMenu()
 void enableSetTempAndModeEdit()
 {
     newMode = mode;
-    fNewSetTemp = fSetTemp;
+    fNewFloatValue = fSetTemp;
     RodaryTick = &editSetTemp;
     RodaryPush = &saveTemp;
     Blink = &blinkSetTemp;
@@ -32,10 +40,10 @@ void enableSetTempAndModeEdit()
 
 void editSetTemp(int8_t ticks)
 {
-    fNewSetTemp += ticks * 0.5;
+    fNewFloatValue += ticks * 0.5;
 
     char lcd_SetTemp[5];
-    dtostrf(fNewSetTemp, 2, 1, lcd_SetTemp);
+    dtostrf(fNewFloatValue, 2, 1, lcd_SetTemp);
 
     lcd_setcursor(12, 1);
     lcd_string(lcd_SetTemp);
@@ -43,7 +51,8 @@ void editSetTemp(int8_t ticks)
 
 void saveTemp()
 {
-    fSetTemp = fNewSetTemp;
+    blinkSetTemp(0);
+    fSetTemp = fNewFloatValue;
     RodaryPush = &saveMode;
     RodaryTick = &editMode;
     Blink = &blinkMode;
@@ -88,6 +97,7 @@ void editMode(int8_t ticks)
 
 void saveMode()
 {
+    blinkMode(0);
     mode = newMode;
     resetMenu();
     writeMode(mode);
@@ -110,6 +120,82 @@ void blinkMode(uint8_t toggle)
 
 void drawMenu()
 {
+    currentIndex = 0;
+    RodaryTick = &scrollPage;
+
+    MenuSelections[0] = &enableTempThresholdPosEdit;
+    // MenuSelectionsEdit[1] = &editTempThresholdNeg;
+
+    MenuSelectionsDraw[0] = &drawTempThresholdPos;
+
+    drawPage();
+}
+
+void drawPage()
+{
+
+    fNewFloatValue = fTempThrPos;
+    RodaryPush = MenuSelections[currentIndex];
+    (*MenuSelectionsDraw[currentIndex])(0);
+
     lcd_clear();
-    lcd_string("MENU");
+    lcd_setcursor(0, 1);
+    lcd_string(menuTexts[currentIndex]);
+
+    // draw cursor
+    lcd_setcursor(0, 2);
+    lcd_string(">");
+}
+
+/*void backToMenu()
+{
+    RodaryTick = &scrollPage;
+    drawPage();
+}*/
+
+void scrollPage(int8_t ticks)
+{
+    // draw new page!
+    currentIndex += ticks;
+    /*if (currentIndex < 0)
+    {
+        currentIndex = 0;
+    }
+    else if (currentIndex > MAXMENULINES - 1)
+    {
+        currentIndex = MAXMENULINES - 1;
+    }*/
+    drawPage();
+}
+
+void enableTempThresholdPosEdit()
+{
+    fNewFloatValue = fTempThrPos;
+    RodaryTick = &editTempThresholdPos;
+    RodaryPush = &saveTempThresholdPos;
+    Blink = &drawTempThresholdPos;
+}
+void editTempThresholdPos(int8_t ticks)
+{
+    fNewFloatValue += ticks * 0.5;
+    drawTempThresholdPos(0);
+}
+void drawTempThresholdPos(uint8_t toggle)
+{
+    lcd_setcursor(5, 2);
+    if (toggle)
+    {
+        lcd_string("      ");
+    }
+    else
+    {
+        dtostrf(fNewFloatValue, 2, 1, lcd_Buffer);
+        lcd_string(lcd_Buffer);
+    }
+}
+void saveTempThresholdPos()
+{
+    fTempThrPos = fNewFloatValue;
+    //Blink = NULL;
+    //backToMenu();
 }

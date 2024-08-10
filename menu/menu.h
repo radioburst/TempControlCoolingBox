@@ -23,5 +23,13 @@ void saveMode();
 void blinkMode(uint8_t toggle);
 
 void drawMenu();
+void drawPage();
+//void backToMenu();
+void scrollPage(int8_t ticks);
+
+void enableTempThresholdPosEdit();
+void editTempThresholdPos(int8_t ticks);
+void drawTempThresholdPos(uint8_t toggle);
+void saveTempThresholdPos();
 
 #endif

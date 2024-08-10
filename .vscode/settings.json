@@ -4,7 +4,7 @@
     "AVR.source.libraries": [
         "/opt/homebrew/opt/avr-gcc@12/avr/include"
     ],
-    "AVR.device.type": "atmega8",
+    "AVR.device.type": "atmega168",
     "AVR.programmer.type": "atmelice_isp",
     "AVR.programmer.port": "usb",
     "AVR.programmer.rate": 921600,

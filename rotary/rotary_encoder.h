@@ -18,9 +18,9 @@ void encode_init()
 {
     // ext INT0
     // any edge on INT0
-    MCUCR |= (1 << ISC00);
+    EICRA |= (1 << ISC00);
     // global interrupt flag for INT0
-    GICR |= (1 << INT0);
+    EIMSK |= (1 << INT0);
     // internal pull up for INT0 pin
     PORTD |= (1 << DDD2);
 
@@ -32,28 +32,24 @@ void encode_init()
     PORTD |= (1 << PD2);  // int. pull up
 
     // 2ms interrupt on Timer2
-
-    // TCCR1B = (1 << CS11) | (1 << CS10) | (1 << WGM12); // CTC, XTAL / 64
-    // OCR1A = (uint8_t)(F_CPU / 64 * 1e-3 - 0.5);        // 2ms
-
     // Set CTC mode (Clear Timer on Compare Match)
-    TCCR2 |= (1 << WGM21);
+    TCCR2A |= (1 << WGM21);
     // Set prescaler to 128
-    TCCR2 |= (1 << CS22) | (1 << CS20); // CS22 and CS20 set, CS21 cleared
+    TCCR2B |= (1 << CS22) | (1 << CS20); // CS22 and CS20 set, CS21 cleared
     // Set compare value to 250 for 2ms interval
-    OCR2 = 250;
+    OCR2A = 250;
 }
 
 void start_encode()
 {
     // Enable Timer2 Compare Match Interrupt
-    TIMSK |= (1 << OCIE2);
+    TIMSK2 |= (1 << OCIE2A);
 }
 
 void stop_encode()
 {
     // Enable Timer2 Compare Match Interrupt
-    TIMSK &= ~(1 << OCIE2);
+    TIMSK2 &= ~(1 << OCIE2A);
 }
 
 int8_t encode_read4() // read four step encoders

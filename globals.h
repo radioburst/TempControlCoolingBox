@@ -25,4 +25,6 @@ extern OPERATION_MODES_t mode;
 
 extern float fSetTemp;
 
+extern float fTempThrPos, fTempThrNeg;
+
 #endif

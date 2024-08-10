@@ -31,6 +31,7 @@ uint8_t uiTempError;
 
 // eeprom values:
 uint8_t uiLongPressTime = 60;
+float fTempThrPos = 0.5, fTempThrNeg = 1.5;
 
 void myPrintf(float fVal, char *);
 void updateLCD();
@@ -67,14 +68,14 @@ int main()
 	fSetTemp = readSetTemp();
 	mode = readMode();
 
-	MCUCR |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
-	GICR |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
+	EICRA |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
+	EIMSK |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
 
 	// Timer 0
 	// start timer 0 with prescaler 1024
-	TCCR0 |= (1 << CS02) | (1 << CS00);
+	TCCR0B |= (1 << CS02) | (1 << CS00);
 	// enable timer 0 overflow interrupt
-	TIMSK |= (1 << TOIE0);
+	TIMSK0 |= (1 << TOIE0);
 
 	// ADC
 	// Set reference to AVCC and input to ADC0
@@ -108,6 +109,9 @@ int main()
 	_delay_ms(1000);
 
 	iInactiveCount = 0;
+	RodaryPush = &switchToEdit;
+	RodaryLongPush = &switchToMenu;
+	start_encode();
 
 	wdt_enable(WDTO_1S);
 	set_sleep_mode(SLEEP_MODE_IDLE);
@@ -118,8 +122,8 @@ int main()
 		{
 		case SLEEP:
 		{
-			GIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
-			GICR |= (1 << INT1);
+			EIFR |= (1 << INTF0); // reset interrupt flag bit otherwise ISR would be called right after enableing because this bit gets set everytime
+			EIMSK |= (1 << INT1);
 			stop_encode(); // stop encode timer as not needed right now
 			setLight(0);
 			RodaryPush = &wakeUp;
@@ -141,7 +145,7 @@ int main()
 		{
 
 			start_encode();
-			GICR &= ~(1 << INT1); // stop ext interrup not needed right now
+			EIMSK &= ~(1 << INT1); // stop ext interrup not needed right now
 			setLight(1);
 			RodaryPush = &switchToEdit;
 			RodaryLongPush = &switchToMenu;
@@ -177,7 +181,7 @@ int main()
 		case MENU:
 		{
 			setLight(1);
-			if (iInactiveCount > 500)
+			if (iInactiveCount > 800)
 			{
 				iInactiveCount = 0;
 				resetMenu();
