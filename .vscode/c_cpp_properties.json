@@ -17,9 +17,11 @@
                 "-fpermissive",
                 "-fno-exceptions",
                 "-fno-threadsafe-statics",
+                "-ffunction-sections",
+                "-fdata-sections",
                 "-pipe",
                 "-mmcu=atmega8",
-                "-DF_CPU=16000000UL"
+                "-DF_CPU=10000000UL"
             ],
             "macFrameworkPath": [
                 "/System/Library/Frameworks",

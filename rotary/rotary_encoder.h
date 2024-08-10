@@ -41,7 +41,7 @@ void encode_init()
     // Set prescaler to 128
     TCCR2 |= (1 << CS22) | (1 << CS20); // CS22 and CS20 set, CS21 cleared
     // Set compare value to 250 for 2ms interval
-    OCR2 = 250;
+    OCR2 = 155;
 }
 
 void start_encode()
@@ -64,7 +64,7 @@ int8_t encode_read4() // read four step encoders
     val = enc_delta;
     enc_delta &= 3;
     sei();
-    return val >> 2;
+    return (val >> 2) * -1;
 }
 
 ISR(TIMER2_COMP_vect) // 2ms for manual movement

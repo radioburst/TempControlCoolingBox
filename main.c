@@ -8,7 +8,6 @@
 #include "lcd-routines.h"
 #include "ds18b20/ds18b20.h"
 #include "rotary/rotary_encoder.h"
-#include "fan/fan.h"
 #include "menu/menu.h"
 #include "eeprom/eeprom.h"
 #include "globals.h"
@@ -41,9 +40,6 @@ void switchToMenu();
 void wakeUp();
 
 // Pinout:
-// PB1 = Fan internal
-// PB2 = Fan external
-
 // PD0 = 230V relay
 // PD1 = 12V relay
 // PD2 = Button Rotary
@@ -93,7 +89,6 @@ int main()
 	PORTD |= (1 << PD7);  // on
 
 	encode_init();
-	fan_init();
 	w1_reset();
 	lcd_init();
 	setLight(1);
@@ -123,7 +118,7 @@ int main()
 			stop_encode(); // stop encode timer as not needed right now
 			setLight(0);
 			RodaryPush = &wakeUp;
-			RodaryLongPush = NULL;
+			// RodaryLongPush = NULL;
 			sleep_mode();
 		}
 		break;
@@ -144,7 +139,7 @@ int main()
 			GICR &= ~(1 << INT1); // stop ext interrup not needed right now
 			setLight(1);
 			RodaryPush = &switchToEdit;
-			RodaryLongPush = &switchToMenu;
+			// RodaryLongPush = &switchToMenu;
 			state = IDLE;
 		}
 		break;
@@ -195,14 +190,14 @@ int main()
 			if (RodaryPush)
 				(*RodaryPush)();
 		}
-		else if (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1))
+		/*else if (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1))
 		{
 			uiRodaryPressActive = 0;
 			uiRodaryPush = 0;
 			iInactiveCount = 0;
 			if (RodaryLongPush)
 				(*RodaryLongPush)();
-		}
+		}*/
 
 		enc_new_delta = encode_read4();
 		if (enc_new_delta != 0)
@@ -293,13 +288,13 @@ void updateLCD()
 	lcd_setcursor(0, 1);
 	lcd_string("Ti=");
 	if (uiTempError > 0)
-		lcd_string(" Err");
+		lcd_string("Err");
 	else
 		lcd_string(lcd_Tist);
 
 	// print set temp
-	lcd_setcursor(1, 0);
-	lcd_string("  Ts=");
+	lcd_setcursor(9, 1);
+	lcd_string("Ts=");
 	lcd_string(lcd_Tsoll);
 
 	// print mode

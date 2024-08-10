@@ -11,5 +11,5 @@
     "AVR.reporter.arguments": [
         "-A"
     ],
-    "AVR.device.frequency": 16000000,
+    "AVR.device.frequency": 10000000,
 }
