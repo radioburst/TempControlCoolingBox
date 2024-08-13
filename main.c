@@ -68,7 +68,7 @@ int main()
 
 	// Read value from eeprom
 	fSetTemp = readSetTemp();
-	mode = readMode();
+	// mode = readMode(); // no need right now is auto detected
 
 	MCUCR |= (1 << ISC11) | (1 << ISC10); // Steigende Flanke von INT1 als ausloeser
 	GICR |= (1 << INT1);				  // Global Interrupt Flag fuer INT1
