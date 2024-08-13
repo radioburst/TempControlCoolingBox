@@ -27,6 +27,8 @@ int iIsOn = 0;
 float fInVoltage = 0;
 volatile float fTCurrent;
 uint8_t uiTempError;
+uint8_t uiBuzzer = 0;
+uint8_t uiFlameDetectedForFirstTime = 0;
 
 // eeprom values:
 uint8_t uiLongPressTime = 60;
@@ -38,6 +40,10 @@ void setLight(uint8_t on);
 void switchToEdit();
 void switchToMenu();
 void wakeUp();
+void readDCVoltage(float *fInVoltageDC);
+void readGasVoltage(float *fInVoltageGas);
+void setBuzzer(uint8_t on);
+void checkBuzzer();
 
 // Pinout:
 // PD0 = 230V relay
@@ -45,10 +51,11 @@ void wakeUp();
 // PD2 = Button Rotary
 // PD3 = Rotary A
 // PD4 = Rotary B
+// PD5 = buzzer
 // PD6 = temp sensor
 // PD7 = light
 
-// PC0 = Poti
+// PC0 = Drill Bat Voltage
 // PC1 = DC Input Voltage
 // PC2 = Flame Control
 
@@ -77,15 +84,16 @@ int main()
 	ADMUX = (1 << REFS0);
 	// Enable ADC, set prescaler to 128 // Fadc=Fcpu/prescaler=1000000/16=62.5kHz
 	ADCSRA = ((1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0));
-
 	// Start the first conversion
 	ADCSRA |= (1 << ADSC);
 
 	DDRD |= (1 << PD0);	  // 230V relay
 	DDRD |= (1 << PD1);	  // 12V relay
+	DDRD |= (1 << PD5);	  // buzzer
 	DDRD |= (1 << PD7);	  // light
-	PORTD &= ~(1 << PD0); // off
-	PORTD &= ~(1 << PD1); // off
+	PORTD &= ~(1 << PD0); // 230V relay off
+	PORTD &= ~(1 << PD1); // 12V relay off
+	PORTD &= ~(1 << PD5); // buzzer off
 	PORTD |= (1 << PD7);  // on
 
 	encode_init();
@@ -100,7 +108,29 @@ int main()
 	lcd_string("Pflanzbeet Braeu");
 	lcd_setcursor(1, 2);
 	lcd_string("Andreas Dorrer");
+
+	// wait for spg stabilize
 	_delay_ms(1000);
+
+	// auto detect mode
+	float fInVoltageDC;
+	readDCVoltage(&fInVoltageDC);
+
+	float fInVoltageGas;
+	readGasVoltage(&fInVoltageGas);
+
+	if (fInVoltageDC > 5)
+	{
+		mode = DC;
+	}
+	else if (fInVoltageGas > 5)
+	{
+		mode = GAS;
+	}
+	else
+	{
+		mode = AC;
+	}
 
 	iInactiveCount = 0;
 
@@ -181,7 +211,6 @@ int main()
 		}
 		}
 
-		// check rodary must be in main! Otherwise issues with lcd when interupt driven since an lcd command can be interupted (cli() and sei() is no solution because of buzzer!)
 		if (uiRodaryPush == 1)
 		{
 			uiRodaryPressActive = 0;
@@ -245,6 +274,13 @@ ISR(TIMER0_OVF_vect)
 	{
 		uiToggle = !uiToggle;
 		(*Blink)(uiToggle);
+
+		// Buzzer
+		if (uiBuzzer > 0)
+		{
+			// toogle buzzer
+			PORTD ^= (1 << PD5);
+		}
 	}
 
 	// Meassure all if in idle or sleep
@@ -379,36 +415,31 @@ void measureAll()
 	//// Input Voltage Check ////////////////////////////
 	if (mode != AC)
 	{
-		ADMUX = (1 << REFS0) | (1 << MUX0);
-		ADCSRA |= (1 << ADSC);
-		while (ADCSRA & (1 << ADSC))
-			;
-
-		fInVoltage = (ADC * 5.0 / 1024.0) / 0.31122;
-
-		if (fInVoltage < 10.3 && mode == GAS)
+		if (mode == DC)
 		{
-			uiLowBat = 1;
-			// iBuzzer = 1;
+			readDCVoltage(&fInVoltage);
 		}
-		else if (fInVoltage < 10.9 && mode == DC)
+		else if (mode == GAS)
+		{
+			readGasVoltage(&fInVoltage);
+		}
+
+		if (fInVoltage < 15 && mode == GAS)
 		{
 			uiLowBat = 1;
-			// iBuzzer = 1;
+		}
+		else if (fInVoltage < 10.5 && mode == DC)
+		{
+			uiLowBat = 1;
 		}
 		else
 		{
 			uiLowBat = 0;
-			/*if (iMode == 2 && iIsOn != 0)
-				iBuzzer = 0;
-			else if (iMode != 2)
-				iBuzzer = 0;*/
 		}
 	}
 	else
 	{
 		uiLowBat = 0;
-		// iBuzzer = 0;
 	}
 
 	//// Flame observation //////////////////////////////
@@ -422,14 +453,12 @@ void measureAll()
 		fSpgFlam = ADC * 5.0 / 1024.0;
 		if (fSpgFlam > 2.0)
 		{
-			// iBuzzer = 1;
 			iIsOn = 0;
 		}
 		else
 		{
-			/*if (iLowBat != 1)
-				iBuzzer = 0;*/
 			iIsOn = 1;
+			uiFlameDetectedForFirstTime = 1;
 		}
 	}
 }
@@ -449,4 +478,53 @@ void switchToMenu()
 void wakeUp()
 {
 	state = WAKE_UP;
+}
+
+void readDCVoltage(float *fInVoltageDC)
+{
+	ADMUX = (1 << REFS0) | (1 << MUX0);
+	ADCSRA |= (1 << ADSC);
+	while (ADCSRA & (1 << ADSC))
+		;
+	*fInVoltageDC = (ADC * 5.0 / 1023.0) * 3.2;
+}
+
+void readGasVoltage(float *fInVoltageGas)
+{
+	ADMUX = (1 << REFS0);
+	ADCSRA |= (1 << ADSC);
+	while (ADCSRA & (1 << ADSC))
+		;
+	*fInVoltageGas = (ADC * 5.0 / 1023.0) * 4.25;
+}
+
+void setBuzzer(uint8_t on)
+{
+	if (on > 0)
+	{
+		uiBuzzer = 1;
+		PORTD |= (1 << PD5);
+	}
+	else
+	{
+		uiBuzzer = 0;
+		PORTD &= ~(1 << PD5);
+	}
+}
+
+void checkBuzzer()
+{
+	// check if buzzer should be on
+	// Criteria:
+	// - Low battery
+	// - Temp error
+	// - Flame went out after detected for the first time
+	if ((uiLowBat > 0 && mode != AC) || uiTempError > 0 || (uiFlameDetectedForFirstTime > 0 && iIsOn < 1))
+	{
+		setBuzzer(1);
+	}
+	else
+	{
+		setBuzzer(0);
+	}
 }

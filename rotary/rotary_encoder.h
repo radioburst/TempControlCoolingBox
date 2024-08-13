@@ -64,7 +64,7 @@ int8_t encode_read4() // read four step encoders
     val = enc_delta;
     enc_delta &= 3;
     sei();
-    return (val >> 2) * -1;
+    return val >> 2;
 }
 
 ISR(TIMER2_COMP_vect) // 2ms for manual movement
