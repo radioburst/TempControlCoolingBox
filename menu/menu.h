@@ -7,7 +7,6 @@
 
 extern void (*RodaryTick)(int8_t);
 extern void (*RodaryPush)();
-extern void (*RodaryLongPush)();
 extern void (*Blink)(uint8_t);
 
 void resetMenu();
@@ -21,7 +20,5 @@ void blinkSetTemp(uint8_t toggle);
 void editMode(int8_t ticks);
 void saveMode();
 void blinkMode(uint8_t toggle);
-
-void drawMenu();
 
 #endif

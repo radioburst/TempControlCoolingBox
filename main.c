@@ -137,6 +137,8 @@ int main()
 	wdt_enable(WDTO_1S);
 	set_sleep_mode(SLEEP_MODE_IDLE);
 
+	RodaryPush = &switchToEdit;
+
 	while (1)
 	{
 		switch (state)
@@ -169,7 +171,6 @@ int main()
 			GICR &= ~(1 << INT1); // stop ext interrup not needed right now
 			setLight(1);
 			RodaryPush = &switchToEdit;
-			// RodaryLongPush = &switchToMenu;
 			state = IDLE;
 		}
 		break;
@@ -177,6 +178,7 @@ int main()
 		{
 			measureAll();
 			updateLCD();
+			checkBuzzer();
 
 			if (iLights > 0)
 			{
@@ -219,14 +221,13 @@ int main()
 			if (RodaryPush)
 				(*RodaryPush)();
 		}
-		/*else if (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1))
+		else if (uiRodaryPush == 2 || (uiRodaryPressActive && iInactiveCount > (uiLongPressTime * 2) - 1))
 		{
 			uiRodaryPressActive = 0;
 			uiRodaryPush = 0;
 			iInactiveCount = 0;
-			if (RodaryLongPush)
-				(*RodaryLongPush)();
-		}*/
+			uiFlameDetectedForFirstTime = 0;
+		}
 
 		enc_new_delta = encode_read4();
 		if (enc_new_delta != 0)
@@ -270,10 +271,13 @@ ISR(TIMER0_OVF_vect)
 {
 	timer0++;
 
-	if (timer0 % 20 == 0 && Blink)
+	if (timer0 % 20 == 0)
 	{
-		uiToggle = !uiToggle;
-		(*Blink)(uiToggle);
+		if (Blink)
+		{
+			uiToggle = !uiToggle;
+			(*Blink)(uiToggle);
+		}
 
 		// Buzzer
 		if (uiBuzzer > 0)
@@ -380,7 +384,7 @@ void measureAll()
 	//// Temp Controller ////////////////////////////////
 	if (mode != GAS)
 	{
-		if (fTCurrent <= (fSetTemp - 1) || uiLowBat == 1)
+		if (fTCurrent <= (fSetTemp - 1) || uiLowBat > 0 || uiTempError > 0)
 		{
 			if (mode == DC)
 				PORTD &= ~(1 << PD1); // AUS DC
@@ -500,10 +504,12 @@ void readGasVoltage(float *fInVoltageGas)
 
 void setBuzzer(uint8_t on)
 {
+	if (on == uiBuzzer)
+		return;
+
 	if (on > 0)
 	{
 		uiBuzzer = 1;
-		PORTD |= (1 << PD5);
 	}
 	else
 	{

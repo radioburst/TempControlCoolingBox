@@ -107,9 +107,3 @@ void blinkMode(uint8_t toggle)
         editMode(0);
     }
 }
-
-void drawMenu()
-{
-    lcd_clear();
-    lcd_string("MENU");
-}
